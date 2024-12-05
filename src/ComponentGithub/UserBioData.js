@@ -1,125 +1,167 @@
 
 import React, { useState } from 'react';
 import axios from 'axios';
-// import { FaMapMarkerAlt } from 'react-icons/fa'; 
-// import { PiBuildingsFill } from 'react-icons/pi';
-// import { FaXTwitter } from 'react-icons/fa6';
-// import { FaGithub } from 'react-icons/fa';
-import { PieChart } from '@mui/x-charts/PieChart'; // Install this or use your preferred chart library
-import Followers from './Followers';
+import { FaMapMarkerAlt } from 'react-icons/fa';
+import { PiBuildingsFill } from 'react-icons/pi';
+import { PieChart } from '@mui/x-charts/PieChart';
+import { Box, Typography, Card, Container } from '@mui/material';
+import RepoBarChart from './RepoListWithChart';
+import img from "./assets/img.jpeg";
 
 const GithubSearch = () => {
-    const [username, setUsername] = useState('');
-    const [profile, setProfile] = useState(null);
-    const [followers, setFollowers] = useState([]);
-    const [error, setError] = useState(null);
-    const [languagesData, setLanguagesData] = useState([]);
+  const [username, setUsername] = useState('');
+  const [profile, setProfile] = useState(null);
+  const [error, setError] = useState(null);
+  const [languages, setLanguages] = useState([]);
+  const [mostForkedRepos, setMostForkedRepos] = useState([]);
+  const [popularLanguage, setPopularLanguage] = useState(null);
+  const [showWelcome, setShowWelcome] = useState(true);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            const profileResponse = await axios.get(`https://api.github.com/users/${username}`);
-            setProfile(profileResponse.data);
-            setError(null);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setShowWelcome(false); // Hide welcome message on search
+    try {
+      const response = await axios.get(`https://api.github.com/users/${username}`);
+      setProfile(response.data);
+      setError(null);
 
-            // Fetch followers
-            const followersResponse = await axios.get(profileResponse.data.followers_url);
-            setFollowers(followersResponse.data);
+      // Fetch the repositories
+      const reposResponse = await axios.get(`https://api.github.com/users/${username}/repos`);
+      const repoLanguages = {};
+      const sortedRepos = reposResponse.data.sort((a, b) => b.forks_count - a.forks_count);
 
-            // Fetch repositories
-            const reposResponse = await axios.get(profileResponse.data.repos_url);
-            const repos = reposResponse.data;
+      // Get the top 5 most forked repos
+      const topForkedRepos = sortedRepos.slice(0, 5).map((repo) => ({
+        name: repo.name,
+        forks: repo.forks_count,
+        url: repo.html_url,
+      }));
 
-            // Fetch languages for each repository
-            const languageRequests = repos.map(repo =>
-                axios.get(repo.languages_url).then(res => res.data)
-            );
-            const languagesArray = await Promise.all(languageRequests);
+      setMostForkedRepos(topForkedRepos);
 
-            // Aggregate language data
-            const languageCounts = languagesArray.reduce((acc, langObj) => {
-                Object.entries(langObj).forEach(([lang, bytes]) => {
-                    acc[lang] = (acc[lang] || 0) + bytes;
-                });
-                return acc;
-            }, {});
-
-            // Convert to pie chart data format
-            const totalBytes = Object.values(languageCounts).reduce((a, b) => a + b, 0);
-            const pieData = Object.entries(languageCounts).map(([lang, bytes], id) => ({
-                id,
-                value: ((bytes / totalBytes) * 100).toFixed(2), // Percentage
-                label: lang,
-            }));
-
-            setLanguagesData(pieData);
-        } catch (error) {
-            setProfile(null);
-            setFollowers([]);
-            setLanguagesData([]);
-            setError('User Not Found');
+      // Count the languages used in repositories
+      reposResponse.data.forEach((repo) => {
+        if (repo.language) {
+          repoLanguages[repo.language] = (repoLanguages[repo.language] || 0) + 1;
         }
-    };
+      });
 
-    return (
-        <div className='main-container'>
-            <h1 className='main-heading'>GitHub User Dashboard</h1>
-            <form onSubmit={handleSubmit} className='search-form'>
-                <input
-                    type='text'
-                    placeholder='Enter Github Username....'
-                    value={username}
-                    className='search-input'
-                    onChange={(e) => setUsername(e.target.value)}
+      // Convert the language counts into an array for PieChart
+      const languageData = Object.keys(repoLanguages).map((language) => ({
+        label: language,
+        value: repoLanguages[language],
+      }));
+
+      setLanguages(languageData);
+
+      // Determine the most popular language
+      const maxLanguage = Object.keys(repoLanguages).reduce((a, b) =>
+        repoLanguages[a] > repoLanguages[b] ? a : b
+        , null);
+
+      setPopularLanguage(maxLanguage);
+    } catch (error) {
+      setProfile(null);
+      setError('User Not Found');
+      setLanguages([]);
+      setMostForkedRepos([]);
+      setPopularLanguage(null); // Reset popular language
+    }
+  };
+
+  return (
+    <div className="main-container">
+      <h1 className="main-heading">GitHub User Dashboard</h1>
+      <form onSubmit={handleSubmit} className="search-form">
+        <input
+          type="text"
+          placeholder="Enter Github Username...."
+          value={username}
+          className="search-input"
+          onChange={(e) => setUsername(e.target.value)}
+        />
+        <button type="submit" className="search-btn">Search</button>
+      </form>
+
+      {showWelcome && (
+
+        <Container maxWidth="lg" style={{ textAlign: 'center' }}>
+          <img
+            src={img}
+            alt="Welcome"
+            style={{
+              width: '100%',
+              maxWidth: "700px",
+              maxHeight: '400px',
+              height: 'auto',
+              borderRadius: "30px"
+            }}
+          />
+        </Container>
+
+      )}
+
+      {error && <p className="error-msg">{error}</p>}
+
+      {profile && (
+        <div className="profile-container">
+          <div className="profile-content">
+            <div className="profile-img">
+              <img src={profile.avatar_url} alt="Avatar" className="profile-avatar" />
+            </div>
+            <div className="profile-details">
+              <div className="profile-des">
+                <h2 className="profile-name">{profile.name}</h2>
+                <p className="profile-created">Joined: {new Date(profile.created_at).toLocaleDateString()}</p>
+              </div>
+              <a href={profile.html_url} target="_blank" rel="noreferrer" className="profile-username">
+                @{profile.login}
+              </a>
+              <p className="profile-bio">{profile.bio}</p>
+
+              <div className="profile-stats">
+                <p className="profile-repos">Repositories<br /><span className="stats">{profile.public_repos}</span></p>
+                <p className="profile-followers">Followers<br /><span className="stats">{profile.followers}</span></p>
+                <p className="profile-following">Following<br /><span className="stats">{profile.following}</span></p>
+              </div>
+
+              <div className="profile-info">
+                <p className="profile-location"><FaMapMarkerAlt /> {profile.location}</p>
+                <p className="profile-company"><PiBuildingsFill /> {profile.company}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Display Popular Language */}
+          {popularLanguage && (
+            <Card className="popular-language" sx={{ p: 4, textAlign: "center", mt: 4, background: " #141d2f", color: "white" }}>
+              <Typography sx={{ fontWeight: "bold" }}>Most Popular Language:</Typography>
+              <Typography sx={{ fontSize: "16px" }}>{popularLanguage}</Typography>
+            </Card>
+          )}
+
+          {/* Display PieChart for Languages Used */}
+          <div className="languages-chart">
+            <Typography sx={{ textAlign: "center", mt: 3 }}>Languages Used</Typography>
+            <Box sx={{ margin: "auto", display: "flex", justifyContent: "center", mt: 3, fontWeight: "bold" }}>
+              {languages.length > 0 && (
+                <PieChart
+                  series={[{ data: languages }]}
+                  width={400}
+                  height={200}
                 />
-                <button type='submit' className='search-btn'>Search</button>
-            </form>
+              )}
+              {languages.length === 0 && <p>No languages data available.</p>}
+            </Box>
+          </div>
 
-            {/* Display Welcome Message */}
-            {!profile && !error && (
-                <div className='welcome-message'>
-                    <img style={{ borderRadius: "40px" }} src='https://media2.dev.to/dynamic/image/width=1000,height=420,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fwww.pubnub.com%2Fcdn%2F3prze68gbwl1%2F3EnBdT60RDOITCeyKH5xjX%2F5e30793c93634b17a7864b86c40bc98d%2F1380.png'></img>
-                </div>
-            )}
-
-            {/* Display Error Message */}
-            {error && <p className='error-msg'>{error}</p>}
-
-            {/* Display Profile Information */}
-            {profile && (
-                <div className='profile-container'>
-                    {/* Profile Details */}
-                    <div className='profile-content'>
-                        <div className='profile-img'>
-                            <img src={profile.avatar_url} alt='Avatar' className='profile-avatar' />
-                        </div>
-                        <div className='profile-details'>
-                            <h2 className='profile-name'>{profile.name}</h2>
-                            <a href={profile.html_url} target='_blank' rel="noreferrer" className='profile-username'>@{profile.login}</a>
-                            <p className='profile-bio'>{profile.bio}</p>
-                        </div>
-                    </div>
-
-                    {/* Display Languages */}
-                    {languagesData.length > 0 && (
-                        <div className='languages-chart'>
-                            <PieChart
-                                series={[{ data: languagesData }]}
-                                width={400}
-                                height={200}
-                            />
-                        </div>
-                    )}
-
-                    {/* Display Followers */}
-                    <div className='followers-container'>
-                        <h3>Followers</h3>
-                        <Followers followers={followers} />
-                    </div>
-                </div>
-            )}
+          <div className="most-forked-repos">
+            <RepoBarChart mostForkedRepos={mostForkedRepos} />
+          </div>
         </div>
-    );
+      )}
+    </div>
+  );
 };
 
 export default GithubSearch;
